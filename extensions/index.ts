@@ -5,7 +5,8 @@
  * no markers in chat text, works in every run path:
  *
  *   team_roster   — who's on the team (names, roles, display)
- *   team_ask      — ask a teammate (async — reply wakes you later)
+ *   team_ask      — ask a teammate (async or wait≤2min — you need the answer)
+ *   team_task     — delegate work (fire-and-forget; they own it and report)
  *   team_handoff  — hand the whole request to a teammate (ends your run)
  *   team_say      — post a message to the chat immediately, mid-run
  *
@@ -45,7 +46,7 @@ interface Request {
 	id: string;
 	from: string;
 	to: string;
-	kind: "ask" | "handoff" | "say";
+	kind: "ask" | "handoff" | "say" | "task";
 	text: string;
 	chat?: string;
 	thread?: string;
@@ -199,6 +200,39 @@ export default function piTeam(pi: ExtensionAPI) {
 					},
 				],
 				details: { to: params.to, replied: reply !== null },
+			};
+		},
+	});
+
+		pi.registerTool({
+		name: "team_task",
+		label: "Team Task",
+		description:
+			"Hand a task to a teammate — fire-and-forget, NO reply expected. They own it: they report progress/results to chat themselves, and for long work they schedule their own cron check-ins. Use for delegated work that may take a while — not for questions.",
+		promptSnippet: "Delegate a task to a teammate",
+		promptGuidelines: [
+			"team_task = delegation (they own it, they report). team_ask = a question (you want an answer back).",
+		],
+		parameters: Type.Object({
+			to: Type.String({ description: "Teammate name (team_roster)" }),
+			task: Type.String({ description: "The task, self-contained" }),
+		}),
+		async execute(_id, params) {
+			if (params.to === me())
+				return {
+					content: [
+						{ type: "text" as const, text: "That's you — just do it." },
+					],
+				};
+			send("task", params.to, params.task);
+			return {
+				content: [
+					{
+						type: "text" as const,
+						text: `task handed to ${params.to} — they'll run it and report to chat themselves`,
+					},
+				],
+				details: { to: params.to },
 			};
 		},
 	});
