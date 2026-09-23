@@ -5,7 +5,7 @@
  * no markers in chat text, works in every run path:
  *
  *   team_roster   — who's on the team (names, roles, display)
- *   team_ask      — ask a teammate; blocks until their reply arrives
+ *   team_ask      — ask a teammate (async — reply wakes you later)
  *   team_handoff  — hand the whole request to a teammate (ends your run)
  *   team_say      — post a message to the chat immediately, mid-run
  *
@@ -147,7 +147,7 @@ export default function piTeam(pi: ExtensionAPI) {
 		name: "team_ask",
 		label: "Team Ask",
 		description:
-			"Ask a teammate a question — they run with their own persona/tools and their reply is returned to you AND posted in chat. Use when a teammate's input makes your answer better.",
+			"Ask a teammate — async: they run and their reply wakes you later. Answer the user NOW with what you have; don't stall waiting.",
 		promptSnippet: "Ask a teammate a question",
 		promptGuidelines: [
 			"Prefer team_ask over silently guessing at another role's job.",
@@ -164,19 +164,17 @@ export default function piTeam(pi: ExtensionAPI) {
 						{ type: "text" as const, text: "That's you — answer directly." },
 					],
 				};
-			const id = send("ask", params.to, params.question);
-			const reply = await awaitReply(id);
+			send("ask", params.to, params.question);
+			// Fire-and-forget — never block on a teammate's run. Their
+			// reply wakes you as a new mailbox turn (kind=reply).
 			return {
 				content: [
 					{
 						type: "text" as const,
-						text:
-							reply === null
-								? `(no reply from ${params.to} within ${ASK_TIMEOUT_MS / 1000}s — answer without them)`
-								: `${params.to} replied:\n${reply}`,
+						text: `sent to ${params.to} — they'll reply asynchronously (you'll be woken when it lands). Answer the user now with what you have.`,
 					},
 				],
-				details: { to: params.to, replied: reply !== null },
+				details: { to: params.to },
 			};
 		},
 	});
