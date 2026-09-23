@@ -1,0 +1,15 @@
+{
+  "name": "pi-team",
+  "version": "1.0.0",
+  "description": "Pi coding agent extension: teammate messaging for multi-agent setups — team_ask, team_handoff, team_say, team_roster via a file mailbox.",
+  "keywords": ["pi-package", "multi-agent", "pi-extension", "agents"],
+  "license": "MIT",
+  "repository": "mohammadraufzahed/pi-team",
+  "pi": {
+    "extensions": ["./extensions/index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  }
+}
