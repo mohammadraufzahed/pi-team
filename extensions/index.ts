@@ -7,6 +7,7 @@
  *   team_roster   — who's on the team (names, roles, display)
  *   team_ask      — ask a teammate (async or wait≤2min — you need the answer)
  *   team_task     — delegate work (fire-and-forget; they own it and report)
+ *   team_emit     — emit an event onto the bus (subscribed souls react)
  *   team_handoff  — hand the whole request to a teammate (ends your run)
  *   team_say      — post a message to the chat immediately, mid-run
  *
@@ -46,7 +47,7 @@ interface Request {
 	id: string;
 	from: string;
 	to: string;
-	kind: "ask" | "handoff" | "say" | "task";
+	kind: "ask" | "handoff" | "say" | "task" | "event";
 	text: string;
 	chat?: string;
 	thread?: string;
@@ -235,6 +236,31 @@ export default function piTeam(pi: ExtensionAPI) {
 					},
 				],
 				details: { to: params.to },
+			};
+		},
+	});
+
+		pi.registerTool({
+		name: "team_emit",
+		label: "Team Emit",
+		description:
+			"Emit an event onto the team bus — subscribed teammates react (or 'all'/'auto'). Use for things teammates should know: bug.found, issue.closed, release.shipped...",
+		promptSnippet: "Emit a team event",
+		parameters: Type.Object({
+			event: Type.String({ description: "dot.name e.g. bug.found" }),
+			data: Type.Optional(Type.String({ description: "payload/details" })),
+			to: Type.Optional(
+				Type.String({ description: "soul | all | auto (default auto — subscribers)" }),
+			),
+		}),
+		async execute(_id, params) {
+			send("event", params.to ?? "auto",
+				`${params.event}|||${params.data ?? ""}`);
+			return {
+				content: [
+					{ type: "text" as const,
+					  text: `event '${params.event}' emitted` },
+				],
 			};
 		},
 	});
