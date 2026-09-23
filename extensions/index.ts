@@ -73,9 +73,12 @@ function send(kind: Request["kind"], to: string, text: string): string {
 	return req.id;
 }
 
-async function awaitReply(id: string): Promise<string | null> {
+async function awaitReply(
+	id: string,
+	budget = ASK_TIMEOUT_MS,
+): Promise<string | null> {
 	const file = join(REP_DIR, `${id}.json`);
-	const deadline = Date.now() + ASK_TIMEOUT_MS;
+	const deadline = Date.now() + budget;
 	while (Date.now() < deadline) {
 		if (existsSync(file)) {
 			try {
@@ -147,15 +150,21 @@ export default function piTeam(pi: ExtensionAPI) {
 		name: "team_ask",
 		label: "Team Ask",
 		description:
-			"Ask a teammate — async: they run and their reply wakes you later. Answer the user NOW with what you have; don't stall waiting.",
+			"Ask a teammate. wait=false (default): async — their reply wakes you as a new turn, answer the user now. wait=true: block ~2min for their reply — only when you literally cannot answer without it.",
 		promptSnippet: "Ask a teammate a question",
 		promptGuidelines: [
-			"Prefer team_ask over silently guessing at another role's job.",
+			"Prefer team_ask over silently guessing at another role's job. Default to async (wait=false) — waiting stalls you AND the user.",
 			"One ask per run — compose the final user-facing answer yourself.",
 		],
 		parameters: Type.Object({
 			to: Type.String({ description: "Teammate name (team_roster)" }),
 			question: Type.String(),
+			wait: Type.Optional(
+				Type.Boolean({
+					description:
+						"true = block up to ~2min for their reply (only when you literally can't answer without it). false/omitted = async: their reply wakes you later. Default false.",
+				}),
+			),
 		}),
 		async execute(_id, params) {
 			if (params.to === me())
@@ -164,17 +173,32 @@ export default function piTeam(pi: ExtensionAPI) {
 						{ type: "text" as const, text: "That's you — answer directly." },
 					],
 				};
-			send("ask", params.to, params.question);
-			// Fire-and-forget — never block on a teammate's run. Their
-			// reply wakes you as a new mailbox turn (kind=reply).
+			const id = send("ask", params.to, params.question);
+			if (!params.wait) {
+				// Async — their reply arrives as a new turn (kind=reply).
+				return {
+					content: [
+						{
+							type: "text" as const,
+							text: `sent to ${params.to} — they'll reply asynchronously (you'll be woken when it lands). Answer the user now with what you have.`,
+						},
+					],
+					details: { to: params.to },
+				};
+			}
+			// Sync — capped short so a slow teammate can't eat the run.
+			const reply = await awaitReply(id, 120_000);
 			return {
 				content: [
 					{
 						type: "text" as const,
-						text: `sent to ${params.to} — they'll reply asynchronously (you'll be woken when it lands). Answer the user now with what you have.`,
+						text:
+							reply === null
+								? `(no reply from ${params.to} in 120s — their answer will still arrive async; answer the user with what you have)`
+								: `${params.to} replied:\n${reply}`,
 					},
 				],
-				details: { to: params.to },
+				details: { to: params.to, replied: reply !== null },
 			};
 		},
 	});
