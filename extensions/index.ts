@@ -50,6 +50,7 @@ interface Request {
 	text: string;
 	chat?: string;
 	thread?: string;
+	msg?: string;
 	at: number;
 }
 
@@ -68,6 +69,7 @@ function send(kind: Request["kind"], to: string, text: string): string {
 		text,
 		chat: process.env.PI_TEAM_CHAT,
 		thread: process.env.PI_TEAM_THREAD,
+		msg: process.env.PI_TEAM_MSG,
 		at: Date.now(),
 	};
 	writeFileSync(join(REQ_DIR, `${req.id}.json`), JSON.stringify(req));
