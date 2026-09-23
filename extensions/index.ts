@@ -99,6 +99,29 @@ async function awaitReply(
 	return null;
 }
 
+async function statusQuery(): Promise<string> {
+	teamDir();
+	const id = randomUUID();
+	writeFileSync(
+		join(REQ_DIR, `${id}.json`),
+		JSON.stringify({
+			id, from: process.env.PI_TEAM_FROM ?? "?", to: "host",
+			kind: "status", text: "", at: Date.now(),
+		}),
+	);
+	const file = join(REP_DIR, `${id}.json`);
+	const deadline = Date.now() + 15_000;
+	while (Date.now() < deadline) {
+		if (existsSync(file)) {
+			try {
+				return String(JSON.parse(readFileSync(file, "utf-8")).text ?? "");
+			} catch { /* retry */ }
+		}
+		await new Promise((r) => setTimeout(r, POLL_MS));
+	}
+	return "(status timed out)";
+}
+
 function soulsDir(): string | null {
 	const d = process.env.SOULS_DIR;
 	return d && existsSync(d) ? d : null;
@@ -262,6 +285,21 @@ export default function piTeam(pi: ExtensionAPI) {
 					  text: `event '${params.event}' emitted` },
 				],
 			};
+		},
+	});
+
+		pi.registerTool({
+		name: "team_status",
+		label: "Team Status",
+		description:
+			"Team board — in-flight asks/tasks, recent failures, each soul's last activity. 'Who's working on what' / 'did my ask land'.",
+		promptSnippet: "Check team status",
+		parameters: Type.Object({}),
+		async execute() {
+			const id = send("say", "host", ""); // placeholder replaced below
+			void id;
+			const rep = await statusQuery();
+			return { content: [{ type: "text" as const, text: rep }] };
 		},
 	});
 
