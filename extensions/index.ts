@@ -53,14 +53,19 @@ interface Request {
 	thread?: string;
 	msg?: string;
 	at: number;
-}
+	converse?: string; // conversation id — multi-turn exchange
 
 function teamDir(): void {
 	mkdirSync(REQ_DIR, { recursive: true });
 	mkdirSync(REP_DIR, { recursive: true });
 }
 
-function send(kind: Request["kind"], to: string, text: string): string {
+function send(
+	kind: Request["kind"],
+	to: string,
+	text: string,
+	extra?: Partial<Request>,
+): string {
 	teamDir();
 	const req: Request = {
 		id: randomUUID(),
@@ -72,6 +77,7 @@ function send(kind: Request["kind"], to: string, text: string): string {
 		thread: process.env.PI_TEAM_THREAD,
 		msg: process.env.PI_TEAM_MSG,
 		at: Date.now(),
+		...extra,
 	};
 	writeFileSync(join(REQ_DIR, `${req.id}.json`), JSON.stringify(req));
 	return req.id;
@@ -226,6 +232,62 @@ export default function piTeam(pi: ExtensionAPI) {
 					},
 				],
 				details: { to: params.to, replied: reply !== null },
+			};
+		},
+	});
+
+	pi.registerTool({
+		name: "team_converse",
+		label: "Team Converse",
+		description:
+			"Talk to a teammate mid-session: ask a question and WAIT for their " +
+			"reply in this same run, then keep the exchange going. First call " +
+			"returns a conversation_id — pass it on follow-ups so they see the " +
+			"prior turns. Use for real back-and-forth (design negotiation, " +
+			"handing off partial findings, asking clarifications). " +
+			"team_ask(wait=true) is one shot; team_converse is a thread.",
+		promptSnippet: "Converse with a teammate — multi-turn, waits for each reply",
+		parameters: Type.Object({
+			to: Type.String({ description: "Teammate name (team_roster)" }),
+			question: Type.String({ description: "What to ask this turn" }),
+			conversation_id: Type.Optional(
+				Type.String({
+					description:
+						"Returned by the first call — pass it on follow-ups so the " +
+						"teammate sees prior turns",
+				}),
+			),
+			timeout: Type.Optional(
+				Type.Number({
+					description: "Seconds to wait for this reply (30–600, default 300)",
+				}),
+			),
+		}),
+		async execute(_id, params) {
+			if (params.to === me())
+				return {
+					content: [
+						{ type: "text" as const, text: "That's you — answer directly." },
+					],
+				};
+			const convId =
+				params.conversation_id || `conv-${randomUUID().slice(0, 8)}`;
+			const id = send("ask", params.to, params.question, {
+				converse: convId,
+			});
+			const secs = Math.min(Math.max(params.timeout ?? 300, 30), 600);
+			const reply = await awaitReply(id, secs * 1000);
+			return {
+				content: [
+					{
+						type: "text" as const,
+						text:
+							reply === null
+								? `(conversation ${convId} — no reply in ${secs}s; their answer may still land async. You can retry with the same conversation_id.)`
+								: `[conversation ${convId} — pass this id on follow-ups]\n${params.to} replied:\n${reply}`,
+					},
+				],
+				details: { to: params.to, conversation_id: convId, replied: reply !== null },
 			};
 		},
 	});
