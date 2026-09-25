@@ -54,6 +54,7 @@ interface Request {
 	msg?: string;
 	at: number;
 	converse?: string; // conversation id — multi-turn exchange
+}
 
 function teamDir(): void {
 	mkdirSync(REQ_DIR, { recursive: true });
