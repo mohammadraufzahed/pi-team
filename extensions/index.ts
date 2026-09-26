@@ -54,6 +54,7 @@ interface Request {
 	msg?: string;
 	at: number;
 	converse?: string; // conversation id — multi-turn exchange
+	budget_s?: number; // declared run budget in seconds — liveness loop extends past it only on heartbeats
 }
 
 function teamDir(): void {
@@ -199,6 +200,12 @@ export default function piTeam(pi: ExtensionAPI) {
 						"true = block up to ~2min for their reply (only when you literally can't answer without it). false/omitted = async: their reply wakes you later. Default false.",
 				}),
 			),
+			budget_min: Type.Optional(
+				Type.Number({
+					description:
+						"Minutes the teammate's run may take (5–30, default 10). Long work also needs heartbeats — see budget rules.",
+				}),
+			),
 		}),
 		async execute(_id, params) {
 			if (params.to === me())
@@ -207,7 +214,11 @@ export default function piTeam(pi: ExtensionAPI) {
 						{ type: "text" as const, text: "That's you — answer directly." },
 					],
 				};
-			const id = send("ask", params.to, params.question);
+			const id = send("ask", params.to, params.question, {
+				budget_s: params.budget_min
+					? Math.min(Math.max(params.budget_min, 5), 30) * 60
+					: undefined,
+			});
 			if (!params.wait) {
 				// Async — their reply arrives as a new turn (kind=reply).
 				return {
@@ -305,6 +316,12 @@ export default function piTeam(pi: ExtensionAPI) {
 		parameters: Type.Object({
 			to: Type.String({ description: "Teammate name (team_roster)" }),
 			task: Type.String({ description: "The task, self-contained" }),
+			budget_min: Type.Optional(
+				Type.Number({
+					description:
+						"How long this may take (5–120, default 15). The run survives past its budget only while the soul heartbeats — bb_set(key='beat:<ticket-id>') every ~2 min.",
+				}),
+			),
 		}),
 		async execute(_id, params) {
 			if (params.to === me())
@@ -313,7 +330,11 @@ export default function piTeam(pi: ExtensionAPI) {
 						{ type: "text" as const, text: "That's you — just do it." },
 					],
 				};
-			send("task", params.to, params.task);
+			send("task", params.to, params.task, {
+				budget_s: params.budget_min
+					? Math.min(Math.max(params.budget_min, 5), 120) * 60
+					: undefined,
+			});
 			return {
 				content: [
 					{
